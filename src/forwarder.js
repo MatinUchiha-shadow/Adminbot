@@ -4,6 +4,7 @@
 
 const axios = require("axios");
 const cheerio = require("cheerio");
+const FormData = require("form-data");
 const { getConfig, saveConfig } = require("./store");
 
 const POLL_INTERVAL_MS = 15000;
@@ -23,7 +24,7 @@ function extractMessages($) {
 
   $(".tgme_widget_message").each((_, el) => {
     const $el = $(el);
-    const dataPost = $el.attr("data-post"); // مثل "channelname/123"
+    const dataPost = $el.attr("data-post");
     if (!dataPost) return;
 
     const id = parseInt(dataPost.split("/").pop(), 10);
@@ -51,17 +52,48 @@ function extractMessages($) {
   return messages;
 }
 
+async function downloadPhoto(photoUrl) {
+  const res = await axios.get(photoUrl, {
+    responseType: "arraybuffer",
+    timeout: 20000,
+    headers: {
+      "User-Agent": "Mozilla/5.0 (compatible; ChannelMirrorBot/1.0)",
+      Referer: "https://t.me/",
+    },
+  });
+  return Buffer.from(res.data);
+}
+
 async function sendToTarget({ botToken, target, message, sourceUsername }) {
   const base = TELEGRAM_API(botToken);
   const originalLink = `https://t.me/${sourceUsername}/${message.id}`;
 
   try {
     if (message.photoUrl) {
-      await axios.post(`${base}/sendPhoto`, {
-        chat_id: target,
-        photo: message.photoUrl,
-        caption: message.text ? message.text.slice(0, 1024) : undefined,
-      });
+      try {
+        const buffer = await downloadPhoto(message.photoUrl);
+        const form = new FormData();
+        form.append("chat_id", target);
+        if (message.text) form.append("caption", message.text.slice(0, 1024));
+        form.append("photo", buffer, { filename: "photo.jpg" });
+
+        await axios.post(`${base}/sendPhoto`, form, {
+          headers: form.getHeaders(),
+          maxBodyLength: Infinity,
+        });
+      } catch (photoErr) {
+        console.error(
+          "خطا در دانلود/آپلود عکس، برگشت به ارسال متنی:",
+          photoErr.response?.data || photoErr.message
+        );
+        const fallbackText =
+          (message.text ? message.text + "\n\n" : "") +
+          `🖼️ برای دیدن عکس: ${originalLink}`;
+        await axios.post(`${base}/sendMessage`, {
+          chat_id: target,
+          text: fallbackText,
+        });
+      }
     } else if (message.hasVideo || message.hasDocument) {
       const caption =
         (message.text ? message.text + "\n\n" : "") +
@@ -74,6 +106,11 @@ async function sendToTarget({ botToken, target, message, sourceUsername }) {
       await axios.post(`${base}/sendMessage`, {
         chat_id: target,
         text: message.text,
+      });
+    } else {
+      await axios.post(`${base}/sendMessage`, {
+        chat_id: target,
+        text: `🔗 پست جدید: ${originalLink}`,
       });
     }
     console.log(`✅ پست جدید فوروارد شد (id: ${message.id})`);
