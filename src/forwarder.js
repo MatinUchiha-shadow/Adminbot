@@ -1,11 +1,12 @@
-// این بخش همه‌ی کانال‌های مبدا (که باید عمومی باشن) رو با خوندن صفحه‌ی پیش‌نمایش
-// عمومی‌شون (t.me/s/username) هر چند ثانیه چک می‌کنه و پست‌های جدید رو (بعد از
-// اعمال قوانین جایگزینی متن) با خودِ بات می‌فرسته تو کانال مقصد.
+// این بخش همه‌ی «پل‌های ارتباطی» رو می‌خونه؛ برای هر کدوم صفحه‌ی پیش‌نمایش
+// عمومی کانال مبدا (t.me/s/username) رو چک می‌کنه، فیلتر نوع محتوا و قوانین
+// جایگزینی متن رو اعمال می‌کنه، و پست‌های جدید رو با ربات همون پل به مقصد می‌فرسته.
 
 const axios = require("axios");
 const cheerio = require("cheerio");
 const FormData = require("form-data");
-const { getConfig, setLastId } = require("./store");
+const { getBridges, setLastId } = require("./store");
+const { log } = require("./logs");
 
 const POLL_INTERVAL_MS = 15000;
 const TELEGRAM_API = (token) => `https://api.telegram.org/bot${token}`;
@@ -13,7 +14,7 @@ const TELEGRAM_API = (token) => `https://api.telegram.org/bot${token}`;
 async function fetchChannelPage(username) {
   const url = `https://t.me/s/${username}`;
   const res = await axios.get(url, {
-    headers: { "User-Agent": "Mozilla/5.0 (compatible; ChannelMirrorBot/1.0)" },
+    headers: { "User-Agent": "Mozilla/5.0 (compatible; RelayBot/1.0)" },
     timeout: 15000,
   });
   return cheerio.load(res.data);
@@ -64,12 +65,26 @@ function applyReplacements(text, replacements) {
   return result;
 }
 
+function passesFilter(message, contentFilter) {
+  switch (contentFilter) {
+    case "text":
+      return !message.photoUrl && !message.hasVideo && !message.hasDocument;
+    case "photo":
+      return !message.hasVideo && !message.hasDocument;
+    case "video":
+      return !message.photoUrl;
+    case "all":
+    default:
+      return true;
+  }
+}
+
 async function downloadPhoto(photoUrl) {
   const res = await axios.get(photoUrl, {
     responseType: "arraybuffer",
     timeout: 20000,
     headers: {
-      "User-Agent": "Mozilla/5.0 (compatible; ChannelMirrorBot/1.0)",
+      "User-Agent": "Mozilla/5.0 (compatible; RelayBot/1.0)",
       Referer: "https://t.me/",
     },
   });
@@ -94,10 +109,7 @@ async function sendToTarget({ botToken, target, message, sourceUsername }) {
           maxBodyLength: Infinity,
         });
       } catch (photoErr) {
-        console.error(
-          "خطا در دانلود/آپلود عکس، برگشت به ارسال متنی:",
-          photoErr.response?.data || photoErr.message
-        );
+        log(`⚠️ عکس آپلود نشد، متن جایگزین فرستاده شد (${sourceUsername}/${message.id})`);
         const fallbackText =
           (message.text ? message.text + "\n\n" : "") +
           `🖼️ برای دیدن عکس: ${originalLink}`;
@@ -107,14 +119,12 @@ async function sendToTarget({ botToken, target, message, sourceUsername }) {
         });
       }
     } else if (message.hasVideo || message.hasDocument) {
-      // فقط متن خودِ پست رو می‌فرستیم، بدون پیام اضافه یا لینک
       if (message.text) {
         await axios.post(`${base}/sendMessage`, {
           chat_id: target,
           text: message.text,
         });
       }
-      // اگه متنی نداشت، چیزی فرستاده نمی‌شه (طبق درخواستت)
     } else if (message.text) {
       await axios.post(`${base}/sendMessage`, {
         chat_id: target,
@@ -126,63 +136,56 @@ async function sendToTarget({ botToken, target, message, sourceUsername }) {
         text: `🔗 پست جدید: ${originalLink}`,
       });
     }
-    console.log(`✅ پست جدید فوروارد شد از ${sourceUsername} (id: ${message.id})`);
+    log(`✅ پست فوروارد شد: @${sourceUsername} → ${target} (id: ${message.id})`);
   } catch (err) {
-    console.error(
-      "خطا در فرستادن پیام به کانال مقصد:",
-      err.response?.data || err.message
-    );
+    log(`❌ خطا در ارسال به ${target}: ${err.response?.data?.description || err.message}`);
   }
 }
 
 function startForwarder() {
-  const botToken = process.env.BOT_TOKEN;
-
-  async function checkSource(source, target, replacements) {
+  async function checkBridge(bridge) {
     try {
-      const $ = await fetchChannelPage(source);
+      const $ = await fetchChannelPage(bridge.source);
       const messages = extractMessages($);
       if (messages.length === 0) return;
 
-      const { lastIds } = getConfig();
-      const lastId = lastIds[source];
       const maxId = messages[messages.length - 1].id;
 
-      if (lastId == null) {
-        setLastId(source, maxId);
-        console.log(`📌 baseline ${source} ثبت شد (id: ${maxId})`);
+      if (bridge.lastId == null) {
+        setLastId(bridge.id, maxId);
+        log(`📌 baseline پل @${bridge.source} → ${bridge.target} ثبت شد`);
         return;
       }
 
-      const newMessages = messages.filter((m) => m.id > lastId);
-      for (const msg of newMessages) {
-        const text = applyReplacements(msg.text, replacements);
+      const allNew = messages.filter((m) => m.id > bridge.lastId);
+      const toSend = allNew.filter((m) => passesFilter(m, bridge.contentFilter));
+
+      for (const msg of toSend) {
+        const text = applyReplacements(msg.text, bridge.replacements);
         await sendToTarget({
-          botToken,
-          target,
+          botToken: bridge.botToken,
+          target: bridge.target,
           message: { ...msg, text },
-          sourceUsername: source,
+          sourceUsername: bridge.source,
         });
       }
 
-      if (newMessages.length > 0) {
-        setLastId(source, maxId);
+      if (allNew.length > 0) {
+        setLastId(bridge.id, maxId);
       }
     } catch (err) {
-      console.error(`خطا در خوندن کانال ${source}:`, err.message);
+      log(`❌ خطا در خوندن @${bridge.source}: ${err.message}`);
     }
   }
 
   async function checkOnce() {
-    const { sources, target, replacements } = getConfig();
-    if (!target || !sources || sources.length === 0) return;
-
-    for (const source of sources) {
-      await checkSource(source, target, replacements);
+    const bridges = getBridges();
+    for (const bridge of bridges) {
+      await checkBridge(bridge);
     }
   }
 
-  console.log("🚀 فورواردر روشن شد (بدون نیاز به یوزربات).");
+  log("🚀 فورواردر روشن شد.");
   checkOnce();
   setInterval(checkOnce, POLL_INTERVAL_MS);
 }
