@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>رله | پل ارتباطی کانال‌های تلگرام</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+  <div id="login-overlay">
+    <div class="login-card">
+      <h1>رله</h1>
+      <p>برای ورود به داشبورد، رمز عبور رو وارد کن</p>
+      <input type="password" id="login-password" placeholder="رمز عبور">
+      <button id="login-btn">ورود</button>
+      <div class="login-error" id="login-error"></div>
+    </div>
+  </div>
+
+  <div class="wrap" id="app" style="display:none;">
+    <header class="top">
+      <div class="brand"><span class="dot"></span> رله</div>
+      <div class="tagline">پل ارتباطی زنده بین کانال‌های تلگرام، با ویرایش هوشمند متن</div>
+    </header>
+
+    <section class="panel">
+      <h2>ساخت پل ارتباطی جدید</h2>
+      <form id="bridge-form">
+        <div class="grid-2">
+          <div class="field">
+            <label>کانال مبدا (عمومی، بدون @)</label>
+            <input type="text" id="f-source" placeholder="channel_username" required>
+          </div>
+          <div class="field">
+            <label>کانال مقصد (@یوزرنیم یا آیدی عددی)</label>
+            <input type="text" id="f-target" placeholder="@my_channel" required>
+          </div>
+        </div>
+        <div class="field">
+          <label>توکن ربات (باید تو کانال مقصد ادمین باشه)</label>
+          <input type="text" class="mono" id="f-token" placeholder="از BotFather بگیر" required>
+        </div>
+        <div class="field">
+          <label>چه محتوایی فوروارد بشه؟</label>
+          <select id="f-filter">
+            <option value="all">همه‌ی محتوا (متن، عکس، ویدیو)</option>
+            <option value="text">فقط متن‌ها</option>
+            <option value="photo">متن و عکس</option>
+            <option value="video">متن و ویدیو</option>
+          </select>
+        </div>
+        <button type="submit" class="btn btn-signal">ایجاد پل ارتباطی</button>
+        <div class="form-error" id="form-error"></div>
+      </form>
+    </section>
+
+    <section class="panel">
+      <h2>پل‌های فعال</h2>
+      <div id="bridges"><div class="empty-state">هنوز پلی نساختی.</div></div>
+    </section>
+  </div>
+
+  <div id="log-toggle" style="display:none;">
+    <div class="bar" id="log-bar">
+      <span>رویدادهای زنده</span>
+      <span id="log-caret">▲</span>
+    </div>
+    <div id="log-body" class="mono"></div>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
