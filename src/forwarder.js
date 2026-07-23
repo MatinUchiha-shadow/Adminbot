@@ -1,11 +1,11 @@
-// این بخش کانال مبدا (که باید عمومی باشه) رو با خوندن صفحه‌ی پیش‌نمایش عمومیش
-// (t.me/s/username) هر چند ثانیه چک می‌کنه و پست‌های جدید رو با خودِ بات
-// می‌فرسته تو کانال مقصد. هیچ لاگین یا API_ID/API_HASH لازم نداره.
+// این بخش همه‌ی کانال‌های مبدا (که باید عمومی باشن) رو با خوندن صفحه‌ی پیش‌نمایش
+// عمومی‌شون (t.me/s/username) هر چند ثانیه چک می‌کنه و پست‌های جدید رو (بعد از
+// اعمال قوانین جایگزینی متن) با خودِ بات می‌فرسته تو کانال مقصد.
 
 const axios = require("axios");
 const cheerio = require("cheerio");
 const FormData = require("form-data");
-const { getConfig, saveConfig } = require("./store");
+const { getConfig, setLastId } = require("./store");
 
 const POLL_INTERVAL_MS = 15000;
 const TELEGRAM_API = (token) => `https://api.telegram.org/bot${token}`;
@@ -50,6 +50,18 @@ function extractMessages($) {
 
   messages.sort((a, b) => a.id - b.id);
   return messages;
+}
+
+function applyReplacements(text, replacements) {
+  if (!text || !replacements || replacements.length === 0) return text;
+  let result = text;
+  for (const { from, to } of replacements) {
+    if (!from) continue;
+    const escaped = from.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const regex = new RegExp(escaped, "gi");
+    result = result.replace(regex, to != null ? to : "");
+  }
+  return result;
 }
 
 async function downloadPhoto(photoUrl) {
@@ -109,6 +121,72 @@ async function sendToTarget({ botToken, target, message, sourceUsername }) {
       });
     } else {
       await axios.post(`${base}/sendMessage`, {
+        chat_id: target,
+        text: `🔗 پست جدید: ${originalLink}`,
+      });
+    }
+    console.log(`✅ پست جدید فوروارد شد از ${sourceUsername} (id: ${message.id})`);
+  } catch (err) {
+    console.error(
+      "خطا در فرستادن پیام به کانال مقصد:",
+      err.response?.data || err.message
+    );
+  }
+}
+
+function startForwarder() {
+  const botToken = process.env.BOT_TOKEN;
+
+  async function checkSource(source, target, replacements) {
+    try {
+      const $ = await fetchChannelPage(source);
+      const messages = extractMessages($);
+      if (messages.length === 0) return;
+
+      const { lastIds } = getConfig();
+      const lastId = lastIds[source];
+      const maxId = messages[messages.length - 1].id;
+
+      if (lastId == null) {
+        setLastId(source, maxId);
+        console.log(`📌 baseline ${source} ثبت شد (id: ${maxId})`);
+        return;
+      }
+
+      const newMessages = messages.filter((m) => m.id > lastId);
+      for (const msg of newMessages) {
+        const text = applyReplacements(msg.text, replacements);
+        await sendToTarget({
+          botToken,
+          target,
+          message: { ...msg, text },
+          sourceUsername: source,
+        });
+      }
+
+      if (newMessages.length > 0) {
+        setLastId(source, maxId);
+      }
+    } catch (err) {
+      console.error(`خطا در خوندن کانال ${source}:`, err.message);
+    }
+  }
+
+  async function checkOnce() {
+    const { sources, target, replacements } = getConfig();
+    if (!target || !sources || sources.length === 0) return;
+
+    for (const source of sources) {
+      await checkSource(source, target, replacements);
+    }
+  }
+
+  console.log("🚀 فورواردر روشن شد (بدون نیاز به یوزربات).");
+  checkOnce();
+  setInterval(checkOnce, POLL_INTERVAL_MS);
+}
+
+module.exports = { startForwarder };      await axios.post(`${base}/sendMessage`, {
         chat_id: target,
         text: `🔗 پست جدید: ${originalLink}`,
       });
