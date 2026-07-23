@@ -1,26 +1,18 @@
 require("dotenv").config();
 
-const http = require("http");
+const { createServer } = require("./server");
 const { startForwarder } = require("./forwarder");
 const { startAiBot } = require("./aiBot");
 
-// Render (و سرویس‌های مشابه) برای اینکه سرویس رو "زنده" نگه دارن، به یه پورت HTTP نیاز دارن.
-// این یه سرور خیلی ساده‌ست که فقط "OK" برمی‌گردونه؛ UptimeRobot می‌تونه هر چند دقیقه بهش سر بزنه.
 const PORT = process.env.PORT || 3000;
-http
-  .createServer((req, res) => {
-    res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8" });
-    res.end("ربات روشنه ✅");
-  })
-  .listen(PORT, () => console.log(`🌐 health-check سرور روی پورت ${PORT} روشنه`));
+const app = createServer();
+app.listen(PORT, () => console.log(`🌐 داشبورد وب روی پورت ${PORT} روشنه`));
 
 (async () => {
   console.log("=== شروع پروژه ===\n");
-
   startForwarder();
   startAiBot();
-
-  console.log("\n✅ همه چی روشنه. Ctrl+C برای خاموش کردن.");
+  console.log("\n✅ همه چی روشنه.");
 })();
 
 process.once("SIGINT", () => process.exit(0));
