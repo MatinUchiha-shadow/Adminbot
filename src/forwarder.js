@@ -107,13 +107,14 @@ async function sendToTarget({ botToken, target, message, sourceUsername }) {
         });
       }
     } else if (message.hasVideo || message.hasDocument) {
-      const caption =
-        (message.text ? message.text + "\n\n" : "") +
-        `🎬 برای دیدن رسانه: ${originalLink}`;
-      await axios.post(`${base}/sendMessage`, {
-        chat_id: target,
-        text: caption,
-      });
+      // فقط متن خودِ پست رو می‌فرستیم، بدون پیام اضافه یا لینک
+      if (message.text) {
+        await axios.post(`${base}/sendMessage`, {
+          chat_id: target,
+          text: message.text,
+        });
+      }
+      // اگه متنی نداشت، چیزی فرستاده نمی‌شه (طبق درخواستت)
     } else if (message.text) {
       await axios.post(`${base}/sendMessage`, {
         chat_id: target,
@@ -178,58 +179,6 @@ function startForwarder() {
 
     for (const source of sources) {
       await checkSource(source, target, replacements);
-    }
-  }
-
-  console.log("🚀 فورواردر روشن شد (بدون نیاز به یوزربات).");
-  checkOnce();
-  setInterval(checkOnce, POLL_INTERVAL_MS);
-}
-
-module.exports = { startForwarder };      await axios.post(`${base}/sendMessage`, {
-        chat_id: target,
-        text: `🔗 پست جدید: ${originalLink}`,
-      });
-    }
-    console.log(`✅ پست جدید فوروارد شد (id: ${message.id})`);
-  } catch (err) {
-    console.error(
-      "خطا در فرستادن پیام به کانال مقصد:",
-      err.response?.data || err.message
-    );
-  }
-}
-
-function startForwarder() {
-  const botToken = process.env.BOT_TOKEN;
-
-  async function checkOnce() {
-    const { source, target, lastId } = getConfig();
-    if (!source || !target) return;
-
-    try {
-      const $ = await fetchChannelPage(source);
-      const messages = extractMessages($);
-      if (messages.length === 0) return;
-
-      const maxId = messages[messages.length - 1].id;
-
-      if (lastId == null) {
-        saveConfig({ lastId: maxId });
-        console.log(`📌 baseline کانال مبدا ثبت شد (id: ${maxId})`);
-        return;
-      }
-
-      const newMessages = messages.filter((m) => m.id > lastId);
-      for (const msg of newMessages) {
-        await sendToTarget({ botToken, target, message: msg, sourceUsername: source });
-      }
-
-      if (newMessages.length > 0) {
-        saveConfig({ lastId: maxId });
-      }
-    } catch (err) {
-      console.error("خطا در خوندن کانال مبدا:", err.message);
     }
   }
 
