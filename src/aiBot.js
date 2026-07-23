@@ -1,10 +1,18 @@
-// بات معمولی تلگرام که با اون چت می‌کنی. دو کار می‌کنه:
-// ۱) تنظیم کانال مبدا/مقصد با فوروارد کردن یه پست از هرکدوم
-// ۲) ویرایش متن با هوش مصنوعی: پیام اصلی رو می‌فرستی، روی همون ریپلای می‌کنی و دستور ویرایش رو می‌نویسی
+// بات معمولی تلگرام که با اون چت می‌کنی. کارهاش:
+// ۱) تنظیم چند کانال مبدا + یک کانال مقصد
+// ۲) قوانین جایگزینی متن (مثلاً کلمه‌ای رو با کلمه‌ی دیگه عوض کنه)
+// ۳) ویرایش متن با هوش مصنوعی: پیام اصلی رو می‌فرستی، روی همون ریپلای می‌کنی و دستور ویرایش رو می‌نویسی
 
 const { Telegraf } = require("telegraf");
 const axios = require("axios");
-const { getConfig, saveConfig } = require("./store");
+const {
+  getConfig,
+  saveConfig,
+  addSource,
+  removeSource,
+  addReplacement,
+  removeReplacement,
+} = require("./store");
 
 const userState = new Map();
 
@@ -16,10 +24,16 @@ function startAiBot() {
   bot.start((ctx) =>
     ctx.reply(
       "سلام! این چیزیه که ازم برمیاد:\n\n" +
-        "📡 مانیتور کانال:\n" +
-        "/setsource — تعیین کانال مبدا (باید عمومی باشه)\n" +
+        "📡 مانیتور کانال (می‌تونی چندتا کانال مبدا داشته باشی):\n" +
+        "/setsource — اضافه‌کردن کانال مبدا (باید عمومی باشه)\n" +
+        "/removesource — حذف یه کانال مبدا\n" +
+        "/sources — دیدن لیست کانال‌های مبدا\n" +
         "/settarget — تعیین کانال خودت (باید من رو اونجا ادمین کنی)\n" +
         "/status — دیدن وضعیت فعلی\n\n" +
+        "🔁 جایگزینی متن (مثلاً یه اسم رو با اسم دیگه عوض کنه):\n" +
+        "/addreplace — اضافه‌کردن قانون جایگزینی\n" +
+        "/replacements — دیدن لیست قانون‌ها\n" +
+        "/removereplace — حذف یه قانون\n\n" +
         "✍️ ویرایش با هوش مصنوعی:\n" +
         "اول یه متن برام بفرست، بعد روی همون پیام ریپلای کن و بگو باهاش چیکار کنم؛ مثلاً «سوالی‌اش کن» یا «رسمی‌ترش کن».\n"
     )
@@ -28,8 +42,29 @@ function startAiBot() {
   bot.command("setsource", (ctx) => {
     userState.set(ctx.from.id, "awaiting_source");
     ctx.reply(
-      "یوزرنیم کانال مبدا رو برام بفرست (باید عمومی باشه)، مثلاً:\n@some_channel"
+      "یوزرنیم کانال مبدا رو برام بفرست (باید عمومی باشه)، مثلاً:\n@some_channel\n\n" +
+        "می‌تونی این دستور رو چند بار بزنی تا چند کانال مبدا اضافه بشه."
     );
+  });
+
+  bot.command("removesource", (ctx) => {
+    const { sources } = getConfig();
+    if (sources.length === 0) {
+      return ctx.reply("هیچ کانال مبدایی تنظیم نشده.");
+    }
+    userState.set(ctx.from.id, "awaiting_remove_source");
+    ctx.reply(
+      "یوزرنیم کانالی که می‌خوای حذف کنی رو بفرست:\n\n" +
+        sources.map((s) => `@${s}`).join("\n")
+    );
+  });
+
+  bot.command("sources", (ctx) => {
+    const { sources } = getConfig();
+    if (sources.length === 0) {
+      return ctx.reply("هیچ کانال مبدایی تنظیم نشده. با /setsource اضافه کن.");
+    }
+    ctx.reply("📡 کانال‌های مبدا:\n" + sources.map((s) => `@${s}`).join("\n"));
   });
 
   bot.command("settarget", (ctx) => {
@@ -40,11 +75,48 @@ function startAiBot() {
     );
   });
 
-  bot.command("status", (ctx) => {
-    const { source, target } = getConfig();
+  bot.command("addreplace", (ctx) => {
+    userState.set(ctx.from.id, "awaiting_replace");
     ctx.reply(
-      `📡 کانال مبدا: ${source ? source : "❌ تنظیم نشده (با /setsource تنظیمش کن)"}\n` +
-        `📤 کانال مقصد: ${target ? target : "❌ تنظیم نشده (با /settarget تنظیمش کن)"}`
+      "کلمه یا عبارتی که می‌خوای جایگزین بشه رو اینجوری بفرست:\n\n" +
+        "matin -> jamali\n\n" +
+        "(هر جا تو پست‌ها «matin» دیده بشه، با «jamali» عوض می‌شه)"
+    );
+  });
+
+  bot.command("replacements", (ctx) => {
+    const { replacements } = getConfig();
+    if (replacements.length === 0) {
+      return ctx.reply("هیچ قانون جایگزینی‌ای تنظیم نشده.");
+    }
+    const list = replacements
+      .map((r, i) => `${i + 1}. ${r.from} → ${r.to}`)
+      .join("\n");
+    ctx.reply("🔁 قوانین جایگزینی:\n" + list);
+  });
+
+  bot.command("removereplace", (ctx) => {
+    const { replacements } = getConfig();
+    if (replacements.length === 0) {
+      return ctx.reply("هیچ قانون جایگزینی‌ای تنظیم نشده.");
+    }
+    const list = replacements
+      .map((r, i) => `${i + 1}. ${r.from} → ${r.to}`)
+      .join("\n");
+    userState.set(ctx.from.id, "awaiting_remove_replace");
+    ctx.reply("شماره‌ی قانونی که می‌خوای حذف کنی رو بفرست:\n\n" + list);
+  });
+
+  bot.command("status", (ctx) => {
+    const { sources, target, replacements } = getConfig();
+    const sourcesText =
+      sources.length > 0
+        ? sources.map((s) => `@${s}`).join("، ")
+        : "❌ تنظیم نشده (با /setsource اضافه کن)";
+    ctx.reply(
+      `📡 کانال‌های مبدا: ${sourcesText}\n` +
+        `📤 کانال مقصد: ${target ? target : "❌ تنظیم نشده (با /settarget تنظیمش کن)"}\n` +
+        `🔁 تعداد قوانین جایگزینی: ${replacements.length}`
     );
   });
 
@@ -54,11 +126,18 @@ function startAiBot() {
 
     if (state === "awaiting_source" && text.startsWith("@")) {
       const username = text.replace(/^@/, "");
-      saveConfig({ source: username, lastId: null });
+      addSource(username);
       userState.delete(ctx.from.id);
       return ctx.reply(
-        `✅ کانال مبدا تنظیم شد: @${username}\nاز الان به بعد پست‌های جدیدش رو چک می‌کنم.`
+        `✅ کانال مبدا اضافه شد: @${username}\nاز الان به بعد پست‌های جدیدش رو هم چک می‌کنم.`
       );
+    }
+
+    if (state === "awaiting_remove_source" && text.startsWith("@")) {
+      const username = text.replace(/^@/, "");
+      removeSource(username);
+      userState.delete(ctx.from.id);
+      return ctx.reply(`✅ کانال مبدا حذف شد: @${username}`);
     }
 
     if (state === "awaiting_target" && text.startsWith("@")) {
@@ -66,6 +145,28 @@ function startAiBot() {
       saveConfig({ target: `@${username}` });
       userState.delete(ctx.from.id);
       return ctx.reply(`✅ کانال مقصد تنظیم شد: @${username}`);
+    }
+
+    if (state === "awaiting_replace" && text.includes("->")) {
+      const [from, to] = text.split("->").map((s) => s.trim());
+      if (!from) {
+        return ctx.reply("فرمت درست نیست. اینجوری بفرست: matin -> jamali");
+      }
+      addReplacement(from, to || "");
+      userState.delete(ctx.from.id);
+      return ctx.reply(`✅ قانون اضافه شد: «${from}» → «${to || "(حذف)"}»`);
+    }
+
+    if (state === "awaiting_remove_replace" && /^\d+$/.test(text)) {
+      const index = parseInt(text, 10) - 1;
+      const { replacements } = getConfig();
+      if (index < 0 || index >= replacements.length) {
+        return ctx.reply("شماره‌ی نامعتبره.");
+      }
+      const removed = replacements[index];
+      removeReplacement(index);
+      userState.delete(ctx.from.id);
+      return ctx.reply(`✅ قانون حذف شد: «${removed.from}» → «${removed.to}»`);
     }
 
     return next();
@@ -87,7 +188,7 @@ function startAiBot() {
       userState.delete(ctx.from.id);
       return ctx.reply(
         `✅ کانال مقصد تنظیم شد: ${forwardedChat.title || forwardedChat.id}\n` +
-          "اگه هنوز کانال مبدا رو تنظیم نکردی، با /setsource ادامه بده."
+          "اگه هنوز کانال مبدا اضافه نکردی، با /setsource ادامه بده."
       );
     }
 
