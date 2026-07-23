@@ -1,13 +1,15 @@
-// ذخیره‌ی تنظیمات روی فایل JSON: چند کانال مبدا، یک کانال مقصد، و قوانین جایگزینی متن
+// ذخیره‌ی «پل‌های ارتباطی»: هر پل یه کانال مبدا، یه کانال مقصد، توکن ربات خودش،
+// فیلتر نوع محتوا، و قوانین جایگزینی متن داره.
 
 const fs = require("fs");
 const path = require("path");
+const { randomUUID } = require("crypto");
 
 const DATA_DIR = path.join(__dirname, "..", "data");
 const CONFIG_FILE = path.join(DATA_DIR, "config.json");
 
 function defaultConfig() {
-  return { sources: [], target: null, lastIds: {}, replacements: [] };
+  return { bridges: [] };
 }
 
 function ensureFile() {
@@ -17,70 +19,86 @@ function ensureFile() {
   }
 }
 
-function getConfig() {
+function readAll() {
   ensureFile();
   const raw = JSON.parse(fs.readFileSync(CONFIG_FILE, "utf-8"));
-  const cfg = { ...defaultConfig(), ...raw };
-
-  if (raw.source && (!raw.sources || raw.sources.length === 0)) {
-    cfg.sources = [raw.source];
-  }
-  if (raw.lastId != null && cfg.sources[0]) {
-    cfg.lastIds = { ...cfg.lastIds, [cfg.sources[0]]: raw.lastId };
-  }
-  if (!cfg.lastIds) cfg.lastIds = {};
-  if (!cfg.replacements) cfg.replacements = [];
-
-  return cfg;
+  if (!raw.bridges) raw.bridges = [];
+  return raw;
 }
 
-function writeConfig(cfg) {
+function writeAll(data) {
   ensureFile();
-  fs.writeFileSync(CONFIG_FILE, JSON.stringify(cfg, null, 2));
-  return cfg;
+  fs.writeFileSync(CONFIG_FILE, JSON.stringify(data, null, 2));
 }
 
-function saveConfig(partial) {
-  const current = getConfig();
-  return writeConfig({ ...current, ...partial });
+function getBridges() {
+  return readAll().bridges;
 }
 
-function addSource(username) {
-  const cfg = getConfig();
-  if (!cfg.sources.includes(username)) cfg.sources.push(username);
-  return writeConfig(cfg);
+function getBridge(id) {
+  return getBridges().find((b) => b.id === id) || null;
 }
 
-function removeSource(username) {
-  const cfg = getConfig();
-  cfg.sources = cfg.sources.filter((s) => s !== username);
-  delete cfg.lastIds[username];
-  return writeConfig(cfg);
+function addBridge({ source, target, botToken, contentFilter }) {
+  const data = readAll();
+  const bridge = {
+    id: randomUUID(),
+    source,
+    target,
+    botToken,
+    contentFilter: contentFilter || "all",
+    replacements: [],
+    lastId: null,
+    createdAt: Date.now(),
+  };
+  data.bridges.push(bridge);
+  writeAll(data);
+  return bridge;
 }
 
-function setLastId(username, id) {
-  const cfg = getConfig();
-  cfg.lastIds[username] = id;
-  return writeConfig(cfg);
+function removeBridge(id) {
+  const data = readAll();
+  data.bridges = data.bridges.filter((b) => b.id !== id);
+  writeAll(data);
 }
 
-function addReplacement(from, to) {
-  const cfg = getConfig();
-  cfg.replacements.push({ from, to });
-  return writeConfig(cfg);
+function updateBridge(id, partial) {
+  const data = readAll();
+  const bridge = data.bridges.find((b) => b.id === id);
+  if (!bridge) return null;
+  Object.assign(bridge, partial);
+  writeAll(data);
+  return bridge;
 }
 
-function removeReplacement(index) {
-  const cfg = getConfig();
-  cfg.replacements.splice(index, 1);
-  return writeConfig(cfg);
+function setLastId(id, lastId) {
+  return updateBridge(id, { lastId });
+}
+
+function addReplacement(id, from, to) {
+  const data = readAll();
+  const bridge = data.bridges.find((b) => b.id === id);
+  if (!bridge) return null;
+  bridge.replacements.push({ from, to });
+  writeAll(data);
+  return bridge;
+}
+
+function removeReplacement(id, index) {
+  const data = readAll();
+  const bridge = data.bridges.find((b) => b.id === id);
+  if (!bridge) return null;
+  bridge.replacements.splice(index, 1);
+  writeAll(data);
+  return bridge;
 }
 
 module.exports = {
-  getConfig,
-  saveConfig,
-  addSource,
-  removeSource,
+  getBridges,
+  getBridge,
+  addBridge,
+  removeBridge,
+  updateBridge,
   setLastId,
   addReplacement,
   removeReplacement,
