@@ -3,61 +3,102 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>رله | پل ارتباطی کانال‌های تلگرام</title>
+<title>ادمین اوچیها | پل ارتباطی کانال‌های تلگرام</title>
 <link rel="stylesheet" href="/style.css">
 </head>
 <body>
 
-  <div id="login-overlay">
+  <div id="auth-overlay">
     <div class="login-card">
-      <h1>رله</h1>
-      <p>برای ورود به داشبورد، رمز عبور رو وارد کن</p>
-      <input type="password" id="login-password" placeholder="رمز عبور">
-      <button id="login-btn">ورود</button>
-      <div class="login-error" id="login-error"></div>
+      <h1>ادمین اوچیها</h1>
+      <div class="tabs">
+        <button class="tab-btn active" data-tab="login">ورود</button>
+        <button class="tab-btn" data-tab="register">ثبت‌نام</button>
+      </div>
+
+      <form id="login-form" class="auth-form">
+        <input type="email" id="login-email" placeholder="ایمیل" required>
+        <input type="password" id="login-password" placeholder="رمز عبور" required>
+        <button type="submit">ورود</button>
+      </form>
+
+      <form id="register-form" class="auth-form" style="display:none;">
+        <input type="email" id="register-email" placeholder="ایمیل" required>
+        <input type="password" id="register-password" placeholder="رمز عبور (حداقل ۶ کاراکتر)" required>
+        <button type="submit">ثبت‌نام</button>
+      </form>
+
+      <div class="login-error" id="auth-error"></div>
     </div>
   </div>
 
   <div class="wrap" id="app" style="display:none;">
     <header class="top">
-      <div class="brand"><span class="dot"></span> رله</div>
+      <div class="brand"><span class="dot"></span> ادمین اوچیها</div>
       <div class="tagline">پل ارتباطی زنده بین کانال‌های تلگرام، با ویرایش هوشمند متن</div>
+      <div class="user-bar">
+        <span id="user-email"></span>
+        <span class="plan-badge" id="plan-badge"></span>
+        <button class="icon-btn" id="logout-btn">خروج</button>
+      </div>
     </header>
 
-    <section class="panel">
-      <h2>ساخت پل ارتباطی جدید</h2>
-      <form id="bridge-form">
-        <div class="grid-2">
-          <div class="field">
-            <label>کانال مبدا (عمومی، بدون @)</label>
-            <input type="text" id="f-source" placeholder="channel_username" required>
+    <div class="panel upsell" id="upsell-banner" style="display:none;">
+      <div>
+        <strong>پلن رایگان فعاله</strong> — فقط ۱ پل ارتباطی و فقط متن (بدون عکس/ویدیو، بدون جایگزینی کلمه).
+        برای باز شدن همه‌ی امکانات و پل نامحدود، پلن پولی (۱۰۰,۰۰۰ تومان) رو فعال کن.
+      </div>
+      <a id="upgrade-link" class="btn btn-signal" target="_blank">ارتقا به پلن پولی</a>
+    </div>
+
+    <nav class="tabs main-tabs" id="main-tabs">
+      <button class="tab-btn active" data-view="bridges">پل‌های ارتباطی</button>
+      <button class="tab-btn" data-view="admin" id="admin-tab-btn" style="display:none;">پنل ادمین</button>
+    </nav>
+
+    <section id="view-bridges">
+      <section class="panel">
+        <h2>ساخت پل ارتباطی جدید</h2>
+        <form id="bridge-form">
+          <div class="grid-2">
+            <div class="field">
+              <label>کانال مبدا (عمومی، بدون @)</label>
+              <input type="text" id="f-source" placeholder="channel_username" required>
+            </div>
+            <div class="field">
+              <label>کانال مقصد (@یوزرنیم یا آیدی عددی)</label>
+              <input type="text" id="f-target" placeholder="@my_channel" required>
+            </div>
           </div>
           <div class="field">
-            <label>کانال مقصد (@یوزرنیم یا آیدی عددی)</label>
-            <input type="text" id="f-target" placeholder="@my_channel" required>
+            <label>توکن ربات (باید تو کانال مقصد ادمین باشه)</label>
+            <input type="text" class="mono" id="f-token" placeholder="از BotFather بگیر" required>
           </div>
-        </div>
-        <div class="field">
-          <label>توکن ربات (باید تو کانال مقصد ادمین باشه)</label>
-          <input type="text" class="mono" id="f-token" placeholder="از BotFather بگیر" required>
-        </div>
-        <div class="field">
-          <label>چه محتوایی فوروارد بشه؟</label>
-          <select id="f-filter">
-            <option value="all">همه‌ی محتوا (متن، عکس، ویدیو)</option>
-            <option value="text">فقط متن‌ها</option>
-            <option value="photo">متن و عکس</option>
-            <option value="video">متن و ویدیو</option>
-          </select>
-        </div>
-        <button type="submit" class="btn btn-signal">ایجاد پل ارتباطی</button>
-        <div class="form-error" id="form-error"></div>
-      </form>
+          <div class="field" id="filter-field">
+            <label>چه محتوایی فوروارد بشه؟</label>
+            <select id="f-filter">
+              <option value="all">همه‌ی محتوا (متن، عکس، ویدیو)</option>
+              <option value="text">فقط متن‌ها</option>
+              <option value="photo">متن و عکس</option>
+              <option value="video">متن و ویدیو</option>
+            </select>
+          </div>
+          <button type="submit" class="btn btn-signal">ایجاد پل ارتباطی</button>
+          <div class="form-error" id="form-error"></div>
+        </form>
+      </section>
+
+      <section class="panel">
+        <h2>پل‌های فعال</h2>
+        <div id="bridges"><div class="empty-state">هنوز پلی نساختی.</div></div>
+      </section>
     </section>
 
-    <section class="panel">
-      <h2>پل‌های فعال</h2>
-      <div id="bridges"><div class="empty-state">هنوز پلی نساختی.</div></div>
+    <section id="view-admin" style="display:none;">
+      <section class="panel">
+        <h2>کاربرهای ثبت‌نام‌شده</h2>
+        <div id="users-table"><div class="empty-state">در حال بارگذاری...</div></div>
+      </section>
     </section>
   </div>
 
