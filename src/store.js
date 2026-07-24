@@ -39,8 +39,14 @@ async function listUsers() {
   return usersCol().find().sort({ createdAt: -1 }).toArray();
 }
 
-async function setUserPlan(id, plan) {
-  await usersCol().updateOne({ _id: toId(id) }, { $set: { plan } });
+async function setUserPlan(id, plan, planExpiresAt) {
+  const update = { plan };
+  if (plan === "paid") {
+    update.planExpiresAt = planExpiresAt || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+  } else {
+    update.planExpiresAt = null;
+  }
+  await usersCol().updateOne({ _id: toId(id) }, { $set: update });
   return findUserById(id);
 }
 
