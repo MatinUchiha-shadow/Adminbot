@@ -43,8 +43,21 @@ function createServer() {
     next();
   }
 
+  function isEffectivelyPaid(u) {
+    if (u.plan !== "paid") return false;
+    if (u.planExpiresAt && new Date(u.planExpiresAt) < new Date()) return false;
+    return true;
+  }
+
   function publicUser(u) {
-    return { id: u._id, email: u.email, plan: u.plan, isAdmin: u.isAdmin };
+    const expired = u.plan === "paid" && u.planExpiresAt && new Date(u.planExpiresAt) < new Date();
+    return {
+      id: u._id,
+      email: u.email,
+      plan: expired ? "free" : u.plan,
+      planExpiresAt: expired ? null : u.planExpiresAt || null,
+      isAdmin: !!u.isAdmin,
+    };
   }
 
   app.post("/api/register", async (req, res) => {
@@ -97,12 +110,12 @@ function createServer() {
       return res.status(400).json({ error: "کانال مبدا، کانال مقصد و توکن ربات لازمه." });
     }
 
-    const isFree = req.user.plan !== "paid";
+    const isFree = !isEffectivelyPaid(req.user);
     if (isFree) {
       const count = await countUserBridges(req.user._id);
       if (count >= FREE_PLAN_MAX_BRIDGES) {
         return res.status(403).json({
-          error: `پلن رایگان فقط ${FREE_PLAN_MAX_BRIDGES} پل ارتباطی رو پشتیبانی می‌کنه. برای پل بیشتر، پلن پولی رو فعال کن.`,
+          error: `پلن رایگان فقط ${FREE_PLAN_MAX_BRIDGES} پل ارتباطی رو پشتیبانی می‌کنه. برای پل بیشتر، اشتراک پلاس رو فعال کن.`,
         });
       }
     }
@@ -124,8 +137,8 @@ function createServer() {
   });
 
   app.post("/api/bridges/:id/replacements", authRequired, async (req, res) => {
-    if (req.user.plan !== "paid") {
-      return res.status(403).json({ error: "جایگزینی متن فقط تو پلن پولیه." });
+    if (!isEffectivelyPaid(req.user)) {
+      return res.status(403).json({ error: "جایگزینی متن فقط تو اشتراک پلاسه." });
     }
     const { from, to } = req.body || {};
     if (!from) return res.status(400).json({ error: "کلمه‌ی مبدا لازمه." });
