@@ -27,7 +27,6 @@ body {
 
 .mono { font-family: 'JetBrains Mono', monospace; direction: ltr; text-align: left; }
 
-/* ---------- Tabs (auth + main) ---------- */
 .tabs { display: flex; gap: 6px; margin-bottom: 18px; }
 .tab-btn {
   flex: 1; padding: 9px; border-radius: 9px; border: 1px solid var(--border);
@@ -39,21 +38,19 @@ body {
 .auth-form input { width: 100%; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--border); background: var(--panel-2); color: var(--text); font-size: 14px; margin-bottom: 12px; font-family: inherit; }
 .auth-form button { width: 100%; padding: 12px; border: none; border-radius: 10px; background: var(--signal); color: #06201c; font-weight: 700; font-size: 14px; cursor: pointer; }
 
-/* ---------- User bar / upsell ---------- */
 .user-bar { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 14px; font-size: 13px; color: var(--muted); }
 .plan-badge { padding: 3px 10px; border-radius: 999px; border: 1px solid var(--border); font-size: 11px; }
 .plan-badge.paid { color: var(--signal); border-color: var(--signal-dim); }
 .plan-badge.free { color: var(--warn); border-color: #4a3a1a; }
+.plan-expiry { font-size: 11px; color: var(--muted); }
 
 .panel.upsell { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; border-color: var(--warn); font-size: 13px; color: var(--muted); }
 
-/* ---------- Admin table ---------- */
 .users-list { display: flex; flex-direction: column; gap: 8px; }
 .user-row { display: flex; align-items: center; justify-content: space-between; background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; font-size: 13px; }
 .user-row .u-email { font-weight: 600; }
 .user-row .u-plan { color: var(--muted); font-size: 11px; margin-right: 8px; }
 
-/* ---------- Auth overlay ---------- */
 #auth-overlay {
   position: fixed; inset: 0; z-index: 50;
   display: flex; align-items: center; justify-content: center;
@@ -80,7 +77,6 @@ body {
 }
 .login-error { color: var(--danger); font-size: 13px; min-height: 18px; margin-top: 8px; }
 
-/* ---------- Layout ---------- */
 .wrap { max-width: 900px; margin: 0 auto; padding: 32px 20px 140px; }
 
 header.top { text-align: center; margin-bottom: 36px; }
@@ -103,7 +99,6 @@ header.top .tagline { color: var(--muted); font-size: 14px; margin-top: 6px; }
 .panel + .panel { margin-top: 22px; }
 .panel h2 { font-size: 15px; margin: 0 0 16px; color: var(--muted); font-weight: 600; }
 
-/* ---------- Form ---------- */
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .field { margin-bottom: 12px; }
 .field label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
@@ -123,7 +118,6 @@ header.top .tagline { color: var(--muted); font-size: 14px; margin-top: 6px; }
 .btn-danger { background: transparent; border: 1px solid var(--danger); color: var(--danger); }
 .form-error { color: var(--danger); font-size: 13px; margin-top: 8px; min-height: 16px; }
 
-/* ---------- Bridge cards ---------- */
 #bridges { display: flex; flex-direction: column; gap: 14px; }
 .empty-state { color: var(--muted); font-size: 13px; text-align: center; padding: 24px 0; }
 
@@ -176,7 +170,6 @@ header.top .tagline { color: var(--muted); font-size: 14px; margin-top: 6px; }
 .rep-add { display: flex; gap: 8px; }
 .rep-add input { flex: 1; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--panel); color: var(--text); font-size: 12px; }
 
-/* ---------- Log console ---------- */
 #log-toggle {
   position: fixed; bottom: 0; left: 0; right: 0; z-index: 30;
   background: #0d1117; border-top: 1px solid var(--border);
