@@ -102,15 +102,22 @@ document.getElementById("logout-btn").addEventListener("click", () => {
   showAuth();
 });
 
-function showApp() {
-  document.getElementById("auth-overlay").style.display = "none";
-  document.getElementById("app").style.display = "block";
+function formatExpiry(dateStr) {
+  if (!dateStr) return "";
+  const d = new Date(dateStr);
+  const diffDays = Math.ceil((d - new Date()) / (1000 * 60 * 60 * 24));
+  const dateLabel = d.toLocaleDateString("fa-IR");
+  return diffDays > 0 ? `تا ${dateLabel} (${diffDays} روز مونده)` : "منقضی شده";
+}
 
+function applyUserState() {
   document.getElementById("user-email").textContent = currentUser.email;
   const badge = document.getElementById("plan-badge");
   const isPaid = currentUser.plan === "paid";
-  badge.textContent = isPaid ? "پلن پولی" : "پلن رایگان";
+  badge.textContent = isPaid ? "اشتراک پلاس" : "پلن رایگان";
   badge.className = "plan-badge " + (isPaid ? "paid" : "free");
+
+  document.getElementById("plan-expiry").textContent = isPaid ? formatExpiry(currentUser.planExpiresAt) : "";
 
   document.getElementById("upsell-banner").style.display = isPaid ? "none" : "flex";
   document.getElementById("upgrade-link").href = `https://t.me/${TELEGRAM_CONTACT}?text=${UPGRADE_TEXT}`;
@@ -123,13 +130,33 @@ function showApp() {
     filterSelect.disabled = false;
   }
 
+  const adminBtn = document.getElementById("admin-tab-btn");
   if (currentUser.isAdmin) {
-    document.getElementById("admin-tab-btn").style.display = "block";
+    adminBtn.style.display = "block";
     document.getElementById("log-toggle").style.display = "block";
-    loadLogs();
+  } else {
+    adminBtn.style.display = "none";
+    document.getElementById("view-admin").style.display = "none";
+    document.getElementById("log-toggle").style.display = "none";
   }
+}
 
+function showApp() {
+  document.getElementById("auth-overlay").style.display = "none";
+  document.getElementById("app").style.display = "block";
+
+  applyUserState();
+  if (currentUser.isAdmin) loadLogs();
   loadBridges();
+}
+
+async function refreshMe() {
+  try {
+    const fresh = await api("/api/me");
+    const changed = JSON.stringify(fresh) !== JSON.stringify(currentUser);
+    currentUser = fresh;
+    if (changed) applyUserState();
+  } catch (e) {}
 }
 
 document.querySelectorAll("#main-tabs .tab-btn").forEach((btn) => {
@@ -284,9 +311,9 @@ async function loadUsers() {
       const row = document.createElement("div");
       row.className = "user-row";
       row.innerHTML = `
-        <div><span class="u-email">${u.email}</span><span class="u-plan">${u.plan === "paid" ? "پولی" : "رایگان"}${u.isAdmin ? " · ادمین" : ""}</span></div>
+        <div><span class="u-email">${u.email}</span><span class="u-plan">${u.plan === "paid" ? "اشتراک پلاس" : "رایگان"}${u.plan === "paid" ? " · " + formatExpiry(u.planExpiresAt) : ""}${u.isAdmin ? " · ادمین" : ""}</span></div>
         <button class="btn ${u.plan === "paid" ? "btn-ghost" : "btn-signal"} toggle-plan">
-          ${u.plan === "paid" ? "برگردون به رایگان" : "فعال‌کردن پولی"}
+          ${u.plan === "paid" ? "برگردون به رایگان" : "فعال‌کردن اشتراک پلاس (۳۰ روز)"}
         </button>
       `;
       row.querySelector(".toggle-plan").addEventListener("click", async () => {
@@ -333,6 +360,7 @@ if (getToken()) {
 
 setInterval(() => {
   if (document.getElementById("app").style.display !== "none" && currentUser) {
+    refreshMe();
     loadBridges();
     if (currentUser.isAdmin) loadLogs();
   }
