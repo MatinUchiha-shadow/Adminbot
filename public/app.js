@@ -5,8 +5,19 @@ const FILTER_LABELS = {
   video: "متن و ویدیو",
 };
 
-function getPassword() {
-  return localStorage.getItem("relay_password") || "";
+const TELEGRAM_CONTACT = "Matin_Uchiha0";
+const UPGRADE_TEXT = encodeURIComponent("سلام، می‌خوام پلن پولی ادمین اوچیها رو فعال کنم.");
+
+let currentUser = null;
+
+function getToken() {
+  return localStorage.getItem("relay_token") || "";
+}
+function setToken(t) {
+  localStorage.setItem("relay_token", t);
+}
+function clearToken() {
+  localStorage.removeItem("relay_token");
 }
 
 async function api(path, options = {}) {
@@ -14,13 +25,13 @@ async function api(path, options = {}) {
     ...options,
     headers: {
       "Content-Type": "application/json",
-      "x-dashboard-password": getPassword(),
+      Authorization: `Bearer ${getToken()}`,
       ...(options.headers || {}),
     },
   });
   if (res.status === 401) {
-    localStorage.removeItem("relay_password");
-    showLogin("رمز عبور اشتباهه یا منقضی شده.");
+    clearToken();
+    showAuth();
     throw new Error("unauthorized");
   }
   const data = await res.json().catch(() => ({}));
@@ -28,52 +39,123 @@ async function api(path, options = {}) {
   return data;
 }
 
-function showLogin(errorMsg) {
-  document.getElementById("login-overlay").style.display = "flex";
+function showAuth(errorMsg) {
+  document.getElementById("auth-overlay").style.display = "flex";
   document.getElementById("app").style.display = "none";
   document.getElementById("log-toggle").style.display = "none";
-  document.getElementById("login-error").textContent = errorMsg || "";
+  document.getElementById("auth-error").textContent = errorMsg || "";
 }
+
+document.querySelectorAll("#auth-overlay .tab-btn").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll("#auth-overlay .tab-btn").forEach((b) => b.classList.remove("active"));
+    btn.classList.add("active");
+    document.getElementById("login-form").style.display = btn.dataset.tab === "login" ? "block" : "none";
+    document.getElementById("register-form").style.display = btn.dataset.tab === "register" ? "block" : "none";
+    document.getElementById("auth-error").textContent = "";
+  });
+});
+
+document.getElementById("login-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const email = document.getElementById("login-email").value.trim();
+  const password = document.getElementById("login-password").value;
+  try {
+    const res = await fetch("/api/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "ورود ناموفق بود.");
+    setToken(data.token);
+    currentUser = data.user;
+    boot();
+  } catch (err) {
+    document.getElementById("auth-error").textContent = err.message;
+  }
+});
+
+document.getElementById("register-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const email = document.getElementById("register-email").value.trim();
+  const password = document.getElementById("register-password").value;
+  try {
+    const res = await fetch("/api/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "ثبت‌نام ناموفق بود.");
+    setToken(data.token);
+    currentUser = data.user;
+    boot();
+  } catch (err) {
+    document.getElementById("auth-error").textContent = err.message;
+  }
+});
+
+document.getElementById("logout-btn").addEventListener("click", () => {
+  clearToken();
+  currentUser = null;
+  showAuth();
+});
 
 function showApp() {
-  document.getElementById("login-overlay").style.display = "none";
+  document.getElementById("auth-overlay").style.display = "none";
   document.getElementById("app").style.display = "block";
-  document.getElementById("log-toggle").style.display = "block";
+
+  document.getElementById("user-email").textContent = currentUser.email;
+  const badge = document.getElementById("plan-badge");
+  const isPaid = currentUser.plan === "paid";
+  badge.textContent = isPaid ? "پلن پولی" : "پلن رایگان";
+  badge.className = "plan-badge " + (isPaid ? "paid" : "free");
+
+  document.getElementById("upsell-banner").style.display = isPaid ? "none" : "flex";
+  document.getElementById("upgrade-link").href = `https://t.me/${TELEGRAM_CONTACT}?text=${UPGRADE_TEXT}`;
+
+  const filterSelect = document.getElementById("f-filter");
+  if (!isPaid) {
+    filterSelect.value = "text";
+    filterSelect.disabled = true;
+  } else {
+    filterSelect.disabled = false;
+  }
+
+  if (currentUser.isAdmin) {
+    document.getElementById("admin-tab-btn").style.display = "block";
+    document.getElementById("log-toggle").style.display = "block";
+    loadLogs();
+  }
+
   loadBridges();
-  loadLogs();
 }
 
-async function tryLogin(password) {
-  const res = await fetch("/api/login", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ password }),
+document.querySelectorAll("#main-tabs .tab-btn").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll("#main-tabs .tab-btn").forEach((b) => b.classList.remove("active"));
+    btn.classList.add("active");
+    document.getElementById("view-bridges").style.display = btn.dataset.view === "bridges" ? "block" : "none";
+    document.getElementById("view-admin").style.display = btn.dataset.view === "admin" ? "block" : "none";
+    if (btn.dataset.view === "admin") loadUsers();
   });
-  const data = await res.json().catch(() => ({}));
-  if (res.ok && data.ok) {
-    localStorage.setItem("relay_password", password);
+});
+
+async function boot() {
+  try {
+    currentUser = await api("/api/me");
     showApp();
-  } else {
-    document.getElementById("login-error").textContent = "رمز عبور اشتباهه.";
+  } catch (e) {
+    showAuth();
   }
 }
 
-document.getElementById("login-btn").addEventListener("click", () => {
-  const pw = document.getElementById("login-password").value;
-  tryLogin(pw);
-});
-document.getElementById("login-password").addEventListener("keydown", (e) => {
-  if (e.key === "Enter") tryLogin(e.target.value);
-});
-
-// ---------- Bridges ----------
 async function loadBridges() {
   try {
     const bridges = await api("/api/bridges");
     renderBridges(bridges);
-  } catch (e) {
-    /* handled by api() */
-  }
+  } catch (e) {}
 }
 
 function renderBridges(bridges) {
@@ -89,7 +171,7 @@ function renderBridges(bridges) {
 function bridgeCard(b) {
   const card = document.createElement("div");
   card.className = "bridge-card";
-
+  const isPaid = currentUser.plan === "paid";
   const repCount = b.replacements ? b.replacements.length : 0;
 
   card.innerHTML = `
@@ -105,13 +187,14 @@ function bridgeCard(b) {
       </div>
       <div class="badges">
         <span class="badge">${FILTER_LABELS[b.contentFilter] || "همه محتوا"}</span>
-        <span class="badge">${repCount} جایگزینی</span>
+        ${isPaid ? `<span class="badge">${repCount} جایگزینی</span>` : ""}
       </div>
       <div class="bridge-actions">
-        <button class="icon-btn toggle-rep">جایگزینی متن</button>
+        ${isPaid ? '<button class="icon-btn toggle-rep">جایگزینی متن</button>' : ""}
         <button class="icon-btn danger delete-bridge">حذف</button>
       </div>
     </div>
+    ${isPaid ? `
     <div class="bridge-extra">
       <div class="rep-list"></div>
       <div class="rep-add">
@@ -119,47 +202,47 @@ function bridgeCard(b) {
         <input type="text" class="rep-to" placeholder="کلمه‌ی جایگزین (مثلاً jamali)">
         <button class="btn btn-ghost rep-add-btn">افزودن</button>
       </div>
-    </div>
+    </div>` : ""}
   `;
 
-  const extra = card.querySelector(".bridge-extra");
-  const repList = card.querySelector(".rep-list");
+  if (isPaid) {
+    const extra = card.querySelector(".bridge-extra");
+    const repList = card.querySelector(".rep-list");
 
-  function renderReps() {
-    repList.innerHTML = "";
-    (b.replacements || []).forEach((r, i) => {
-      const item = document.createElement("div");
-      item.className = "rep-item";
-      item.innerHTML = `<span>${r.from} ← ${r.to || "(حذف)"}</span><button class="icon-btn danger" data-i="${i}">حذف</button>`;
-      item.querySelector("button").addEventListener("click", async () => {
-        await api(`/api/bridges/${b.id}/replacements/${i}`, { method: "DELETE" });
-        loadBridges();
+    function renderReps() {
+      repList.innerHTML = "";
+      (b.replacements || []).forEach((r, i) => {
+        const item = document.createElement("div");
+        item.className = "rep-item";
+        item.innerHTML = `<span>${r.from} ← ${r.to || "(حذف)"}</span><button class="icon-btn danger">حذف</button>`;
+        item.querySelector("button").addEventListener("click", async () => {
+          await api(`/api/bridges/${b._id}/replacements/${i}`, { method: "DELETE" });
+          loadBridges();
+        });
+        repList.appendChild(item);
       });
-      repList.appendChild(item);
+    }
+    renderReps();
+
+    card.querySelector(".toggle-rep").addEventListener("click", () => {
+      extra.classList.toggle("open");
+    });
+
+    card.querySelector(".rep-add-btn").addEventListener("click", async () => {
+      const from = card.querySelector(".rep-from").value.trim();
+      const to = card.querySelector(".rep-to").value.trim();
+      if (!from) return;
+      await api(`/api/bridges/${b._id}/replacements`, {
+        method: "POST",
+        body: JSON.stringify({ from, to }),
+      });
+      loadBridges();
     });
   }
-  renderReps();
-
-  card.querySelector(".toggle-rep").addEventListener("click", () => {
-    extra.classList.toggle("open");
-  });
 
   card.querySelector(".delete-bridge").addEventListener("click", async () => {
     if (!confirm(`پل @${b.source} → ${b.target} حذف بشه؟`)) return;
-    await api(`/api/bridges/${b.id}`, { method: "DELETE" });
-    loadBridges();
-  });
-
-  card.querySelector(".rep-add-btn").addEventListener("click", async () => {
-    const from = card.querySelector(".rep-from").value.trim();
-    const to = card.querySelector(".rep-to").value.trim();
-    if (!from) return;
-    await api(`/api/bridges/${b.id}/replacements`, {
-      method: "POST",
-      body: JSON.stringify({ from, to }),
-    });
-    card.querySelector(".rep-from").value = "";
-    card.querySelector(".rep-to").value = "";
+    await api(`/api/bridges/${b._id}`, { method: "DELETE" });
     loadBridges();
   });
 
@@ -187,7 +270,38 @@ document.getElementById("bridge-form").addEventListener("submit", async (e) => {
   }
 });
 
-// ---------- Logs ----------
+async function loadUsers() {
+  const container = document.getElementById("users-table");
+  try {
+    const users = await api("/api/admin/users");
+    if (!users.length) {
+      container.innerHTML = '<div class="empty-state">هنوز کاربری ثبت‌نام نکرده.</div>';
+      return;
+    }
+    container.innerHTML = '<div class="users-list"></div>';
+    const list = container.querySelector(".users-list");
+    users.forEach((u) => {
+      const row = document.createElement("div");
+      row.className = "user-row";
+      row.innerHTML = `
+        <div><span class="u-email">${u.email}</span><span class="u-plan">${u.plan === "paid" ? "پولی" : "رایگان"}${u.isAdmin ? " · ادمین" : ""}</span></div>
+        <button class="btn ${u.plan === "paid" ? "btn-ghost" : "btn-signal"} toggle-plan">
+          ${u.plan === "paid" ? "برگردون به رایگان" : "فعال‌کردن پولی"}
+        </button>
+      `;
+      row.querySelector(".toggle-plan").addEventListener("click", async () => {
+        const newPlan = u.plan === "paid" ? "free" : "paid";
+        await api(`/api/admin/users/${u.id}/plan`, {
+          method: "POST",
+          body: JSON.stringify({ plan: newPlan }),
+        });
+        loadUsers();
+      });
+      list.appendChild(row);
+    });
+  } catch (e) {}
+}
+
 async function loadLogs() {
   try {
     const logs = await api("/api/logs");
@@ -197,9 +311,7 @@ async function loadLogs() {
       .map((l) => `<div class="line"><span class="t">${l.time}</span>${escapeHtml(l.line)}</div>`)
       .join("");
     if (wasAtBottom) body.scrollTop = body.scrollHeight;
-  } catch (e) {
-    /* handled by api() */
-  }
+  } catch (e) {}
 }
 
 function escapeHtml(s) {
@@ -213,21 +325,15 @@ document.getElementById("log-bar").addEventListener("click", () => {
   caret.textContent = body.classList.contains("open") ? "▼" : "▲";
 });
 
-// ---------- Boot ----------
-if (getPassword()) {
-  api("/api/bridges")
-    .then((bridges) => {
-      renderBridges(bridges);
-      showApp();
-    })
-    .catch(() => showLogin());
+if (getToken()) {
+  boot();
 } else {
-  showLogin();
+  showAuth();
 }
 
 setInterval(() => {
-  if (document.getElementById("app").style.display !== "none") {
+  if (document.getElementById("app").style.display !== "none" && currentUser) {
     loadBridges();
-    loadLogs();
+    if (currentUser.isAdmin) loadLogs();
   }
 }, 8000);
