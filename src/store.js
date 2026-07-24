@@ -1,104 +1,112 @@
-// ذخیره‌ی «پل‌های ارتباطی»: هر پل یه کانال مبدا، یه کانال مقصد، توکن ربات خودش،
-// فیلتر نوع محتوا، و قوانین جایگزینی متن داره.
+// دسترسی به داده‌ها روی MongoDB: کاربرها و پل‌های ارتباطی هرکدوم.
 
-const fs = require("fs");
-const path = require("path");
-const { randomUUID } = require("crypto");
+const { getDb } = require("./db");
+const { ObjectId } = require("mongodb");
 
-const DATA_DIR = path.join(__dirname, "..", "data");
-const CONFIG_FILE = path.join(DATA_DIR, "config.json");
-
-function defaultConfig() {
-  return { bridges: [] };
+function usersCol() {
+  return getDb().collection("users");
+}
+function bridgesCol() {
+  return getDb().collection("bridges");
 }
 
-function ensureFile() {
-  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-  if (!fs.existsSync(CONFIG_FILE)) {
-    fs.writeFileSync(CONFIG_FILE, JSON.stringify(defaultConfig(), null, 2));
-  }
+function toId(id) {
+  return typeof id === "string" ? new ObjectId(id) : id;
 }
 
-function readAll() {
-  ensureFile();
-  const raw = JSON.parse(fs.readFileSync(CONFIG_FILE, "utf-8"));
-  if (!raw.bridges) raw.bridges = [];
-  return raw;
+// ---------- کاربرها ----------
+async function createUser({ email, passwordHash, isAdmin }) {
+  const user = {
+    email: email.toLowerCase().trim(),
+    passwordHash,
+    plan: "free",
+    isAdmin: !!isAdmin,
+    createdAt: new Date(),
+  };
+  const res = await usersCol().insertOne(user);
+  return { ...user, _id: res.insertedId };
 }
 
-function writeAll(data) {
-  ensureFile();
-  fs.writeFileSync(CONFIG_FILE, JSON.stringify(data, null, 2));
+async function findUserByEmail(email) {
+  return usersCol().findOne({ email: email.toLowerCase().trim() });
 }
 
-function getBridges() {
-  return readAll().bridges;
+async function findUserById(id) {
+  return usersCol().findOne({ _id: toId(id) });
 }
 
-function getBridge(id) {
-  return getBridges().find((b) => b.id === id) || null;
+async function listUsers() {
+  return usersCol().find().sort({ createdAt: -1 }).toArray();
 }
 
-function addBridge({ source, target, botToken, contentFilter }) {
-  const data = readAll();
+async function setUserPlan(id, plan) {
+  await usersCol().updateOne({ _id: toId(id) }, { $set: { plan } });
+  return findUserById(id);
+}
+
+// ---------- پل‌های ارتباطی ----------
+async function getUserBridges(userId) {
+  return bridgesCol().find({ userId: toId(userId) }).toArray();
+}
+
+async function getAllBridges() {
+  return bridgesCol().find().toArray();
+}
+
+async function countUserBridges(userId) {
+  return bridgesCol().countDocuments({ userId: toId(userId) });
+}
+
+async function addBridge(userId, { source, target, botToken, contentFilter }) {
   const bridge = {
-    id: randomUUID(),
+    userId: toId(userId),
     source,
     target,
     botToken,
     contentFilter: contentFilter || "all",
     replacements: [],
     lastId: null,
-    createdAt: Date.now(),
+    createdAt: new Date(),
   };
-  data.bridges.push(bridge);
-  writeAll(data);
-  return bridge;
+  const res = await bridgesCol().insertOne(bridge);
+  return { ...bridge, _id: res.insertedId };
 }
 
-function removeBridge(id) {
-  const data = readAll();
-  data.bridges = data.bridges.filter((b) => b.id !== id);
-  writeAll(data);
+async function removeBridge(id, userId) {
+  await bridgesCol().deleteOne({ _id: toId(id), userId: toId(userId) });
 }
 
-function updateBridge(id, partial) {
-  const data = readAll();
-  const bridge = data.bridges.find((b) => b.id === id);
-  if (!bridge) return null;
-  Object.assign(bridge, partial);
-  writeAll(data);
-  return bridge;
+async function setLastId(id, lastId) {
+  await bridgesCol().updateOne({ _id: toId(id) }, { $set: { lastId } });
 }
 
-function setLastId(id, lastId) {
-  return updateBridge(id, { lastId });
+async function addReplacement(id, userId, from, to) {
+  await bridgesCol().updateOne(
+    { _id: toId(id), userId: toId(userId) },
+    { $push: { replacements: { from, to } } }
+  );
+  return bridgesCol().findOne({ _id: toId(id) });
 }
 
-function addReplacement(id, from, to) {
-  const data = readAll();
-  const bridge = data.bridges.find((b) => b.id === id);
-  if (!bridge) return null;
-  bridge.replacements.push({ from, to });
-  writeAll(data);
-  return bridge;
-}
-
-function removeReplacement(id, index) {
-  const data = readAll();
-  const bridge = data.bridges.find((b) => b.id === id);
+async function removeReplacement(id, userId, index) {
+  const bridge = await bridgesCol().findOne({ _id: toId(id), userId: toId(userId) });
   if (!bridge) return null;
   bridge.replacements.splice(index, 1);
-  writeAll(data);
+  await bridgesCol().updateOne({ _id: toId(id) }, { $set: { replacements: bridge.replacements } });
   return bridge;
 }
 
 module.exports = {
-  getBridges,
-  getBridge,
+  createUser,
+  findUserByEmail,
+  findUserById,
+  listUsers,
+  setUserPlan,
+  getUserBridges,
+  getAllBridges,
+  countUserBridges,
   addBridge,
   removeBridge,
-  updateBridge,
   setLastId,
   addReplacement,
   removeReplacement,
