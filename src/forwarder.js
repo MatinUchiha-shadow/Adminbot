@@ -5,7 +5,7 @@
 const axios = require("axios");
 const cheerio = require("cheerio");
 const FormData = require("form-data");
-const { getBridges, setLastId } = require("./store");
+const { getAllBridges, setLastId } = require("./store");
 const { log } = require("./logs");
 
 const POLL_INTERVAL_MS = 15000;
@@ -152,7 +152,7 @@ function startForwarder() {
       const maxId = messages[messages.length - 1].id;
 
       if (bridge.lastId == null) {
-        setLastId(bridge.id, maxId);
+        await setLastId(bridge._id, maxId);
         log(`📌 baseline پل @${bridge.source} → ${bridge.target} ثبت شد`);
         return;
       }
@@ -171,7 +171,7 @@ function startForwarder() {
       }
 
       if (allNew.length > 0) {
-        setLastId(bridge.id, maxId);
+        await setLastId(bridge._id, maxId);
       }
     } catch (err) {
       log(`❌ خطا در خوندن @${bridge.source}: ${err.message}`);
@@ -179,7 +179,7 @@ function startForwarder() {
   }
 
   async function checkOnce() {
-    const bridges = getBridges();
+    const bridges = await getAllBridges();
     for (const bridge of bridges) {
       await checkBridge(bridge);
     }
